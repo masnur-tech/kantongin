@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#7C9A92">
+
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kantongin">
+    
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://www.googleapis.com https://*.supabase.co https://*.supabase.in https://cdn.jsdelivr.net;">
+
+    <title>Kantongin - Tracker Keuangan</title>
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="/public/icon-192.png">
+    <link rel="apple-touch-icon" href="/public/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+
+    <!-- CSS & Fonts -->
+    <link rel="stylesheet" href="css/style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap"
+        rel="stylesheet">
+
+    <!-- Chart.js - Loaded lazily -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+</head>
+
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-icon-wrapper">
+                <div class="login-icon-pulse">💰</div>
+            </div>
+            <h1 class="login-title">Kantongin</h1>
+            <p class="login-subtitle">Keluar masuk duit, tetap terkontrol</p>
+
+            <!-- Google Login -->
+            <button id="googleLoginBtn" class="google-btn">
+                <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Login dengan Google
+            </button>
+
+            <div class="divider">atau</div>
+
+            <!-- Email Login/Signup Form -->
+            <form id="emailAuthForm" class="email-auth-form" onsubmit="return false;">
+                <input type="email" id="emailInput" class="modal-input" placeholder="Email" required>
+
+                <div class="password-wrapper">
+                    <input type="password" id="passwordInput" class="modal-input" placeholder="Kata sandi (minimal 6 karakter)" required minlength="6">
+                    <button type="button" id="togglePasswordBtn" class="link-btn">Tampilkan</button>
+                </div>
+                <div id="passwordStrength" class="password-strength">Kekuatan: -</div>
+                <div id="passwordStrengthBar" class="password-strength-bar">
+                    <span class="strength-fill" id="passwordStrengthFill"></span>
+                </div>
+                <div id="passwordSuggestion" class="password-suggestion">Gunakan kombinasi huruf dan angka.</div>
+
+                <div class="email-actions">
+                    <button id="emailSignInBtn" class="primary-btn">Masuk dengan Email</button>
+                    <button id="emailSignUpBtn" class="secondary-btn">Daftar dengan Email</button>
+                </div>
+                <button id="forgotPasswordBtn" class="link-btn">Lupa kata sandi?</button>
+                <div id="authMessage" class="auth-message" aria-live="polite"></div>
+            </form>
+
+            <div class="login-features">
+                <span>🔒 Aman & Terenkripsi</span>
+                <span>☁️ Cloud Backup</span>
+                <span>📱 Multi Device</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="main hidden">
+        <div class="app-header">
+            <div class="header-greeting">
+                <span class="greeting-text">Halo,</span>
+                <span class="user-name" id="userName">Loading...</span>
+            </div>
+            <button class="icon-btn" id="settingsBtn">
+                <img src="/icons/settings.svg" alt="Settings" width="24" height="24">
+            </button>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <button class="nav-item active" data-tab="transactions">
+                <img src="/icons/home.svg" class="nav-icon" alt="Home">
+                <span class="nav-label">Transaksi</span>
+            </button>
+            <button class="nav-item" data-tab="stats">
+                <img src="/icons/stats.svg" class="nav-icon" alt="Stats">
+                <span class="nav-label">Statistik</span>
+            </button>
+            <button class="nav-item" data-tab="profile">
+                <img src="/icons/profile.svg" class="nav-icon" alt="Profile">
+                <span class="nav-label">Profil</span>
+            </button>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content-area">
+
+            <!-- TAB 1: TRANSAKSI -->
+            <div id="transactionsTab" class="tab-content active">
+                <div class="balance-card-premium">
+                    <div class="balance-header">
+                        <span class="balance-label">Total Saldo</span>
+                    </div>
+                    <div class="balance-amount" id="balanceAmount">Rp 0</div>
+                    <div class="balance-stats">
+                        <div class="stat-item">
+                            <span class="stat-label-income">📈 Pemasukan</span>
+                            <strong class="stat-value-income" id="totalIncome">Rp 0</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label-expense">📉 Pengeluaran</span>
+                            <strong class="stat-value-expense" id="totalExpense">Rp 0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <button class="quick-action-btn" id="quickIncomeBtn">
+                        <img src="/icons/income.svg" class="quick-icon" alt="Income">
+                        <span>Pemasukan</span>
+                    </button>
+                    <button class="quick-action-btn" id="quickExpenseBtn">
+                        <img src="/icons/expense.svg" class="quick-icon" alt="Expense">
+                        <span>Pengeluaran</span>
+                    </button>
+                </div>
+
+                <div class="monthly-summary">
+                    <div class="summary-header">
+                        <h3>Ringkasan Bulan Ini</h3>
+                    </div>
+                    <div class="summary-stats">
+                        <div class="summary-card">
+                            <span>💸 Pengeluaran</span>
+                            <strong id="monthlyExpense">Rp 0</strong>
+                        </div>
+                        <div class="summary-card">
+                            <span>💰 Pemasukan</span>
+                            <strong id="monthlyIncome">Rp 0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <h3>Riwayat Transaksi</h3>
+                    <div class="header-actions">
+                        <select id="monthFilter" class="month-filter">
+                            <option value="all">📅 Semua waktu</option>
+                        </select>
+                        <button id="addTransactionBtn" class="add-transaction-btn">+ Tambah</button>
+                    </div>
+                </div>
+                <div id="transactionList" class="transaction-list"></div>
+            </div>
+
+            <!-- TAB 2: STATISTIK -->
+            <div id="statsTab" class="tab-content">
+                <div class="section-header">
+                    <h3>📊 Statistik Pengeluaran</h3>
+                </div>
+
+                <div class="stats-summary-cards">
+                    <div class="stat-card-simple">
+                        <span class="stat-label">💸 Total Pengeluaran</span>
+                        <strong class="stat-number expense-text" id="statsTotalExpense">Rp 0</strong>
+                    </div>
+                    <div class="stat-card-simple">
+                        <span class="stat-label">💰 Total Pemasukan</span>
+                        <strong class="stat-number income-text" id="statsTotalIncome">Rp 0</strong>
+                    </div>
+                    <div class="stat-card-simple">
+                        <span class="stat-label">🔄 Rata-rata per hari</span>
+                        <strong class="stat-number" id="statsDailyAvg">Rp 0</strong>
+                    </div>
+                </div>
+
+                <div class="stats-chart">
+                    <canvas id="expenseChart" width="280" height="280" style="max-width:280px; margin:0 auto;"></canvas>
+                </div>
+
+                <div class="insight-box">
+                    <div class="insight-icon">💡</div>
+                    <div class="insight-text" id="statsInsight">Memuat data...</div>
+                </div>
+
+                <div class="section-header" style="margin-top: 24px;">
+                    <h3>📂 Pengeluaran per Kategori</h3>
+                </div>
+                <div id="statsCategoryList" class="category-breakdown"></div>
+            </div>
+
+            <!-- TAB 3: PROFIL -->
+            <div id="profileTab" class="tab-content">
+                <div class="profile-card">
+                    <div class="profile-avatar" id="profileAvatar">👤</div>
+                    <div class="profile-name" id="profileName">Pengguna</div>
+                    <div class="profile-email" id="profileEmail">email@example.com</div>
+                    <button class="logout-btn-premium" id="logoutBtnPremium">
+                        <img src="/icons/logout.svg" alt="Logout" width="18" height="18">
+                        <span>Keluar</span>
+                    </button>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-item">
+                        <div class="settings-left">
+                            <img src="/icons/darkmode.svg" class="settings-icon" alt="Dark Mode">
+                            <span>Mode Gelap</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="darkModeToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-item">
+                        <div class="settings-left">
+                            <img src="/icons/export.svg" class="settings-icon" alt="Export">
+                            <span>Export Data (CSV)</span>
+                        </div>
+                        <button class="settings-action-btn" id="exportBtn">Export</button>
+                    </div>
+
+                    <div class="settings-item">
+                        <div class="settings-left">
+                            <img src="/icons/delete.svg" class="settings-icon" alt="Delete">
+                            <span>Hapus Semua Data</span>
+                        </div>
+                        <button class="settings-action-btn danger" id="clearDataBtn">Hapus</button>
+                    </div>
+                </div>
+
+                <div class="app-info">
+                    <p>Kantongin</p>
+                    <p class="app-version">Versi 2.0.1</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Floating Action Button -->
+        <button id="fab" class="fab">
+            <img src="/icons/add.svg" class="fab-icon" alt="Add">
+        </button>
+    </div>
+
+    <!-- Account Settings Page -->
+    <div id="accountPage" class="account-page-container hidden">
+        <div id="accountPageContainer"></div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="js/app.js"></script>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p>Memuat data...</p>
+    </div>
+</body>
+
+</html>

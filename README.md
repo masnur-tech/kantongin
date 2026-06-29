@@ -43,19 +43,29 @@
 ## 📁 Struktur Proyek
 
 kantongin/
-├── index.html # Halaman utama
-├── manifest.json # Konfigurasi PWA
-├── sw.js # Service Worker
+├── index.html          # Halaman utama
+├── manifest.json       # Konfigurasi PWA
+├── sw.js              # Service Worker
 ├── css/
-│ └── style.css # Styling
+│   └── style.css      # Styling
 ├── js/
-│ ├── app.js # Main entry point
-│ ├── auth.js # Autentikasi
-│ ├── database.js # Database operations
-│ ├── ui/ # UI components
-│ └── utils/ # Helper functions
-├── icons/ # Icon assets
-└── public/ # Public assets
+│   ├── app.js         # Main entry point
+│   ├── auth.js        # Autentikasi
+│   ├── database.js    # Database operations
+│   ├── ui/            # UI components
+│   │   ├── components.js
+│   │   ├── modal.js
+│   │   ├── navigation.js
+│   │   ├── theme.js
+│   │   └── account.js
+│   └── utils/         # Helper functions
+│       ├── helpers.js
+│       ├── constants.js
+│       └── chart.js
+├── icons/             # Icon assets
+└── public/            # Public assets
+    ├── icon-192.png
+    └── icon-512.png
 
 ## 🤝 Kontribusi
 

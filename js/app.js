@@ -19,7 +19,8 @@ import {
     loadTransactionsFromLocal,
     syncToCloud,
     fetchFromCloud,
-    deleteAllFromCloud
+    deleteAllFromCloud,
+    deleteTransactionFromCloud
 } from './database.js';
 
 import {
@@ -59,6 +60,7 @@ let currentUser = null;
 let syncTimeout = null;
 let isInitialized = false;
 let refreshTimeout = null;
+let isSyncing = false;
 
 // ========== DOM CACHE (Memoized Selectors) ==========
 const DOM = {
@@ -138,30 +140,44 @@ const validateTransaction = (amount, description, type, category = 'Lainnya') =>
 
 // ========== CORE FUNCTIONS ==========
 const saveAndSync = debounce(() => {
-    if (transactions.length === 0) {
-        saveTransactionsToLocal(transactions);
-        return;
-    }
-    
+    // Always save to local first
     saveTransactionsToLocal(transactions);
+    
+    // If user is logged in and online, sync to cloud
     if (currentUser && navigator.onLine) {
         if (syncTimeout) clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(() => {
-            syncToCloud(transactions).catch(error => {
-                console.error('Sync to cloud failed:', error);
+        syncTimeout = setTimeout(async () => {
+            try {
+                if (transactions.length === 0) {
+                    // If no transactions, delete all from cloud
+                    await deleteAllFromCloud();
+                    console.log('✅ Cloud data cleared');
+                } else {
+                    // Sync current transactions to cloud
+                    const result = await syncToCloud(transactions);
+                    if (result.success) {
+                        console.log('✅ Data tersinkron ke cloud');
+                    } else {
+                        console.error('Sync to cloud failed:', result.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Sync to cloud error:', error);
                 showToast('⚠️ Gagal sinkron ke cloud');
-            });
+            }
             syncTimeout = null;
         }, CONFIG.SYNC_DELAY);
     }
 }, CONFIG.SYNC_DELAY);
 
+// ========== ADD TRANSACTION ==========
 const addTransaction = (amount, description, type, category, date) => {
     const validation = validateTransaction(amount, description, type, category);
     if (!validation.valid) return false;
     
     const { amount: cleanAmount, description: cleanDescription, type: cleanType, category: cleanCategory } = validation.data;
     
+    const now = new Date().toISOString();
     const newTransaction = {
         id: generateSecureId(),
         amount: cleanAmount,
@@ -169,7 +185,8 @@ const addTransaction = (amount, description, type, category, date) => {
         type: cleanType,
         category: cleanCategory || 'Lainnya',
         date: new Date(date).toISOString(),
-        createdAt: new Date().toISOString()
+        createdAt: now,
+        updatedAt: now
     };
 
     transactions.unshift(newTransaction);
@@ -179,6 +196,7 @@ const addTransaction = (amount, description, type, category, date) => {
     return true;
 };
 
+// ========== UPDATE TRANSACTION ==========
 const updateTransaction = (id, amount, description, type, category, date) => {
     const validation = validateTransaction(amount, description, type, category);
     if (!validation.valid) return false;
@@ -191,6 +209,7 @@ const updateTransaction = (id, amount, description, type, category, date) => {
         return false;
     }
     
+    const now = new Date().toISOString();
     transactions[index] = {
         ...transactions[index],
         amount: cleanAmount,
@@ -198,7 +217,7 @@ const updateTransaction = (id, amount, description, type, category, date) => {
         type: cleanType,
         category: cleanCategory || 'Lainnya',
         date: new Date(date).toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: now
     };
     
     saveAndSync();
@@ -207,7 +226,8 @@ const updateTransaction = (id, amount, description, type, category, date) => {
     return true;
 };
 
-const deleteTransaction = (id) => {
+// ========== DELETE TRANSACTION (FIXED) ==========
+const deleteTransaction = async (id) => {
     const transaction = transactions.find(t => t.id === id);
     if (!transaction) {
         showToast('⚠️ Transaksi tidak ditemukan');
@@ -215,13 +235,32 @@ const deleteTransaction = (id) => {
     }
     
     if (confirm(`Hapus transaksi "${transaction.description}"?`)) {
+        // Remove from local array
         transactions = transactions.filter(t => t.id !== id);
-        saveAndSync();
+        saveTransactionsToLocal(transactions);
+        
+        // Delete from cloud if user is logged in and online
+        if (currentUser && navigator.onLine) {
+            try {
+                const result = await deleteTransactionFromCloud(id);
+                if (result.success) {
+                    console.log('✅ Transaksi dihapus dari cloud');
+                } else {
+                    console.error('Gagal hapus dari cloud:', result.error);
+                    showToast('⚠️ Transaksi dihapus dari lokal, gagal sync ke cloud');
+                }
+            } catch (error) {
+                console.error('Error deleting from cloud:', error);
+                showToast('⚠️ Gagal menghapus dari cloud');
+            }
+        }
+        
         refreshAllUI();
         showToast('🗑️ Transaksi dihapus!');
     }
 };
 
+// ========== DELETE ALL DATA ==========
 const deleteAllData = async () => {
     if (!confirm('⚠️ PERINGATAN! Ini akan menghapus SEMUA transaksi Anda. Data TIDAK bisa dikembalikan. Lanjutkan?')) {
         return;
@@ -281,36 +320,85 @@ const exportToCSV = () => {
     }
 };
 
-// ========== SYNC FROM CLOUD ==========
+// ========== SYNC FROM CLOUD (FIXED) ==========
 const syncFromCloud = async () => {
     if (!currentUser) return;
-
+    if (isSyncing) return;
+    
+    isSyncing = true;
     showLoadingWithMessage('Menyinkronkan data...');
 
     try {
         const cloudTransactions = await fetchFromCloud();
-        if (cloudTransactions.length > 0) {
-            const transactionMap = new Map();
-            transactions.forEach(t => transactionMap.set(t.id, t));
-            cloudTransactions.forEach(t => {
-                if (t.id) transactionMap.set(t.id, t);
-            });
-            const mergedTransactions = Array.from(transactionMap.values())
-                .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-
-            if (mergedTransactions.length !== transactions.length) {
-                transactions = mergedTransactions;
-                saveTransactionsToLocal(transactions);
-                refreshAllUI();
-                showToast(`✅ Data tersinkron (${cloudTransactions.length} transaksi dari cloud)`);
-            } else if (cloudTransactions.length > 0) {
-                showToast(`✅ Data sudah sinkron (${cloudTransactions.length} transaksi)`);
+        const cloudIds = new Set(cloudTransactions.map(t => t.id));
+        const localIds = new Set(transactions.map(t => t.id));
+        
+        // Find transactions that are only in local (need to upload to cloud)
+        const localOnly = transactions.filter(t => !cloudIds.has(t.id));
+        
+        // Find transactions that are only in cloud (need to add to local)
+        const cloudOnly = cloudTransactions.filter(t => !localIds.has(t.id));
+        
+        // Find transactions that exist in both (check for updates)
+        const commonTransactions = cloudTransactions.filter(t => localIds.has(t.id));
+        const updatedFromCloud = [];
+        
+        commonTransactions.forEach(cloudT => {
+            const localT = transactions.find(t => t.id === cloudT.id);
+            if (localT) {
+                const cloudTime = new Date(cloudT.updatedAt || cloudT.createdAt || cloudT.date);
+                const localTime = new Date(localT.updatedAt || localT.createdAt || localT.date);
+                if (cloudTime > localTime) {
+                    updatedFromCloud.push(cloudT);
+                }
             }
+        });
+        
+        let changesMade = false;
+        
+        // Upload local-only transactions to cloud
+        if (localOnly.length > 0 && navigator.onLine) {
+            await syncToCloud(localOnly);
+            console.log(`📤 Mengupload ${localOnly.length} transaksi ke cloud`);
+            changesMade = true;
         }
+        
+        // Add cloud-only transactions to local
+        if (cloudOnly.length > 0) {
+            transactions = [...cloudOnly, ...transactions];
+            changesMade = true;
+            console.log(`📥 Menambahkan ${cloudOnly.length} transaksi dari cloud`);
+        }
+        
+        // Update transactions that are newer in cloud
+        if (updatedFromCloud.length > 0) {
+            const updatedIds = new Set(updatedFromCloud.map(t => t.id));
+            transactions = transactions.filter(t => !updatedIds.has(t.id));
+            transactions = [...updatedFromCloud, ...transactions];
+            changesMade = true;
+            console.log(`🔄 Mengupdate ${updatedFromCloud.length} transaksi dari cloud`);
+        }
+        
+        // Sort transactions by date
+        if (changesMade) {
+            transactions.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+            saveTransactionsToLocal(transactions);
+            refreshAllUI();
+            
+            let message = '✅ Data tersinkron';
+            if (cloudOnly.length > 0) message += ` (${cloudOnly.length} baru)`;
+            if (updatedFromCloud.length > 0) message += ` (${updatedFromCloud.length} diupdate)`;
+            if (localOnly.length > 0) message += ` (${localOnly.length} diupload)`;
+            showToast(message);
+        } else {
+            showToast('✅ Data sudah sinkron');
+        }
+        
     } catch (error) {
         console.error('Sync from cloud failed:', error);
         showToast('⚠️ Gagal sinkron data dari cloud');
     } finally {
+        isSyncing = false;
         hideLoading();
     }
 };
@@ -450,7 +538,7 @@ const handleOnlineStatus = () => {
         showToast('📡 Kembali online, menyinkronkan data...');
         if (currentUser) {
             syncToCloud(transactions).catch(() => {});
-            syncFromCloud();
+            setTimeout(() => syncFromCloud(), 1000);
         }
     } else {
         showToast('📴 Anda offline, data disimpan secara lokal');
@@ -809,7 +897,7 @@ const cleanup = () => {
 initApp();
 
 // ========== EXPOSE FOR DEBUGGING ==========
-if (process.env.NODE_ENV === 'development') {
+if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
     window.__KANTONGIN__ = {
         transactions: () => transactions,
         currentUser: () => currentUser,
@@ -817,6 +905,7 @@ if (process.env.NODE_ENV === 'development') {
         updateTransaction,
         deleteTransaction,
         refreshAllUI,
+        syncFromCloud,
         cleanup,
         DOM
     };

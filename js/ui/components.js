@@ -58,7 +58,7 @@ export function filterTransactionsByMonth(transactions, filterValue) {
     const [year, month] = filterValue.split('-');
     return transactions.filter(t => {
         const d = new Date(t.date);
-        return d.getFullYear() == year && d.getMonth() + 1 == month;
+        return d.getFullYear() === parseInt(year, 10) && d.getMonth() + 1 === parseInt(month, 10);
     });
 }
 
@@ -149,8 +149,7 @@ export function renderTransactionList(transactions, onEdit, onDelete) {
     document.querySelectorAll('.transaction-item').forEach(el => {
         el.addEventListener('click', (e) => {
             if (e.target.closest('.transaction-delete')) return;
-            const id = parseInt(el.dataset.id);
-            if (onEdit) onEdit(id);
+            if (onEdit) onEdit(el.dataset.id);
         });
     });
 
@@ -158,9 +157,8 @@ export function renderTransactionList(transactions, onEdit, onDelete) {
     document.querySelectorAll('.transaction-delete').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const id = parseInt(btn.dataset.id);
             if (confirm('Hapus transaksi ini?')) {
-                if (onDelete) onDelete(id);
+                if (onDelete) onDelete(btn.dataset.id);
             }
         });
     });
